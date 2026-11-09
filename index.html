@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiempo en San Juan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f3e9d8; --panel:#fbf5ea; --ink:#2a1f17; --muted:#7a6552;
+  --line:#d9c7aa; --accent:#2f3f8f; --warm:#c2571a;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#1a1530; --panel:#241d40; --ink:#f1e6d2; --muted:#a99cc4;
+        --line:#3a3060; --accent:#9fb0ff; --warm:#ff9a5c;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.5}
+header,main,footer{max-width:1200px;margin:0 auto;padding:1.5rem 1rem}
+h1{font-size:clamp(2rem,6vw,3.5rem);margin:0;line-height:1;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:.5rem 0 0}
+.now{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-top:1.5rem}
+.now div{border-left:3px solid var(--warm);padding-left:.75rem}
+.now b{display:block;font-size:2rem;line-height:1.1}
+.now span{color:var(--muted);font-size:.9rem}
+#arrow{display:inline-block;transition:transform .4s}
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.panel h2{font-size:1.1rem;margin:0;padding:.75rem 1rem;border-bottom:1px solid var(--line)}
+.panel iframe{display:block;width:100%;height:420px;border:0}
+footer{color:var(--muted);font-size:.85rem}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>San Juan, Argentina</h1>
+  <p class="sub">Viento, temperatura y lluvia en el valle de Tulum.</p>
+  <div class="now" aria-live="polite">
+    <div><b id="t">–</b><span>Temperatura</span></div>
+    <div><b><span id="arrow">↑</span> <span id="w">–</span></b><span>Viento (km/h) · <span id="dir">–</span></span></div>
+    <div><b id="g">–</b><span>Ráfagas (km/h)</span></div>
+    <div><b id="p">–</b><span>Prob. de lluvia, próximas 12 h</span></div>
+  </div>
+</header>
+
+<main class="grid" id="maps"></main>
+
+<footer>
+  Mapas: <a href="https://www.windy.com" target="_blank" rel="noopener">Windy.com</a> (modelo ECMWF).
+  Valores actuales: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>.
+  <span id="upd"></span>
+</footer>
+
+<script>
+const LAT = -31.5375, LON = -68.5364;
+
+// Paneles de Windy: cambiá overlay, zoom o product si querés.
+const layers = [
+  {title:"Viento",       overlay:"wind"},
+  {title:"Temperatura",  overlay:"temp"},
+  {title:"Lluvia",       overlay:"rain"}
+];
+const maps = document.getElementById("maps");
+layers.forEach(l => {
+  const q = new URLSearchParams({
+    lat:LAT, lon:LON, detailLat:LAT, detailLon:LON, zoom:8, level:"surface",
+    overlay:l.overlay, product:"ecmwf", menu:"", message:"true", marker:"true",
+    calendar:"now", type:"map", location:"coordinates", detail:"",
+    metricWind:"km/h", metricTemp:"°C", radarRange:"-1"
+  });
+  const s = document.createElement("section");
+  s.className = "panel";
+  s.innerHTML = `<h2>${l.title}</h2><iframe loading="lazy" title="Windy: ${l.title}"
+    src="https://embed.windy.com/embed2.html?${q}"></iframe>`;
+  maps.appendChild(s);
+});
+
+// Condiciones actuales
+const cardinal = d => ["N","NE","E","SE","S","SO","O","NO"][Math.round(d/45)%8];
+async function load(){
+  try{
+    const u = "https://api.open-meteo.com/v1/forecast?latitude="+LAT+"&longitude="+LON+
+      "&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m"+
+      "&hourly=precipitation_probability&forecast_days=1&timezone=America%2FArgentina%2FSan_Juan";
+    const r = await fetch(u); if(!r.ok) throw new Error(r.status);
+    const d = await r.json(), c = d.current;
+    const h = new Date().getHours();
+    const next = d.hourly.precipitation_probability.slice(h, h+12);
+    document.getElementById("t").textContent = Math.round(c.temperature_2m)+" °C";
+    document.getElementById("w").textContent = Math.round(c.wind_speed_10m);
+    document.getElementById("g").textContent = Math.round(c.wind_gusts_10m);
+    document.getElementById("dir").textContent = "desde el "+cardinal(c.wind_direction_10m);
+    // la flecha apunta hacia donde va el viento
+    document.getElementById("arrow").style.transform = "rotate("+(c.wind_direction_10m+180)+"deg)";
+    document.getElementById("p").textContent = (next.length ? Math.max(...next) : 0)+" %";
+    document.getElementById("upd").textContent = "Actualizado " + new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) + ".";
+  }catch(e){
+    document.getElementById("upd").textContent = "No se pudieron cargar los valores actuales; los mapas siguen funcionando.";
+  }
+}
+load(); setInterval(load, 15*60*1000);
+</script>
+</body>
+</html>
