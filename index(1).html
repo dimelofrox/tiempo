@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiempo en San Juan</title>
+<style>
+:root{--bg:#fafafa;--ink:#111;--muted:#777;--line:#e2e2e2}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--ink:#eee;--muted:#8a8a8a;--line:#2a2a2a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:1.4rem;font-weight:600;margin:0}
+.now{color:var(--muted);margin:.25rem 0 2rem}
+.now b{color:var(--ink);font-weight:600}
+h2{font-size:.95rem;font-weight:500;color:var(--muted);margin:0 0 .5rem}
+iframe{display:block;width:100%;border:1px solid var(--line);border-radius:6px;height:420px}
+.grid{display:grid;gap:1.5rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));margin-top:1.5rem}
+.wide iframe{height:560px}
+footer{color:var(--muted);font-size:.8rem;margin-top:2rem}
+a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>San Juan, Argentina</h1>
+  <p class="now" id="now">Cargando…</p>
+  <section class="wide" id="forecast"></section>
+  <div class="grid" id="maps"></div>
+  <footer>
+    Mapas de <a href="https://www.windy.com" target="_blank" rel="noopener">Windy.com</a>.
+    Valores actuales de <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>.
+  </footer>
+</div>
+
+<script>
+const LAT = -31.5375, LON = -68.5364;
+
+function url(overlay, detail, zoom){
+  return "https://embed.windy.com/embed2.html?" + new URLSearchParams({
+    lat:LAT, lon:LON, detailLat:LAT, detailLon:LON, zoom:zoom, level:"surface",
+    overlay:overlay, product:"ecmwf", menu:"", message:"true", marker:"true",
+    calendar:"now", type:"map", location:"coordinates", detail:detail,
+    metricWind:"km/h", metricTemp:"°C", radarRange:"-1"
+  });
+}
+function panel(title, src){
+  return `<h2>${title}</h2><iframe loading="lazy" title="Windy: ${title}" src="${src}"></iframe>`;
+}
+
+document.getElementById("forecast").innerHTML = panel("Pronóstico", url("temp","true",9));
+const maps = document.getElementById("maps");
+[["Viento","wind"],["Temperatura","temp"],["Lluvia","rain"]].forEach(([t,o])=>{
+  const s = document.createElement("section");
+  s.innerHTML = panel(t, url(o,"",8));
+  maps.appendChild(s);
+});
+
+const cardinal = d => ["N","NE","E","SE","S","SO","O","NO"][Math.round(d/45)%8];
+async function load(){
+  const el = document.getElementById("now");
+  try{
+    const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude="+LAT+"&longitude="+LON+
+      "&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m"+
+      "&hourly=precipitation_probability&forecast_days=1&timezone=America%2FArgentina%2FSan_Juan");
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json(), c = d.current, h = new Date().getHours();
+    const rain = Math.max(0, ...d.hourly.precipitation_probability.slice(h, h+12));
+    el.innerHTML = `<b>${Math.round(c.temperature_2m)} °C</b> · viento <b>${Math.round(c.wind_speed_10m)} km/h</b> del ${cardinal(c.wind_direction_10m)}, ráfagas ${Math.round(c.wind_gusts_10m)} · lluvia ${rain} % en 12 h`;
+  }catch(e){
+    el.textContent = "Valores actuales no disponibles.";
+  }
+}
+load(); setInterval(load, 15*60*1000);
+</script>
+</body>
+</html>
